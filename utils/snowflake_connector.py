@@ -432,8 +432,50 @@ class SnowflakeConnector:
         logger.info("All connections closed")
 
 
-# Create a default connector instance
-connector = SnowflakeConnector()
+# Create a function to get or create the connector
+_connector_instance = None
+
+def get_connector():
+    """
+    Get the Snowflake connector instance, creating it if necessary.
+
+    Returns:
+        SnowflakeConnector: Connector instance or None if initialization fails
+    """
+    global _connector_instance
+    if _connector_instance is None:
+        try:
+            _connector_instance = SnowflakeConnector()
+        except ValueError as e:
+            # Return None if connection parameters are invalid
+            logger.warning(f"Could not initialize connector: {str(e)}")
+            return None
+    return _connector_instance
+
+
+def init_with_oauth_token(token):
+    """
+    Initialize Snowflake connector with an OAuth token.
+
+    Args:
+        token: OAuth access token
+
+    Returns:
+        SnowflakeConnector: Initialized connector instance or None if initialization fails
+    """
+    global _connector_instance
+
+    # Update settings
+    settings.snowflake.oauth_token = token
+    settings.snowflake.oauth_enabled = True
+
+    # Create new connector
+    try:
+        _connector_instance = SnowflakeConnector()
+        return _connector_instance
+    except ValueError as e:
+        logger.error(f"Error initializing connector with OAuth token: {str(e)}")
+        return None
 
 
 # Helper functions for direct usage
@@ -448,6 +490,9 @@ def execute_snowflake_query(query: str, params: Optional[Dict[str, Any]] = None)
     Returns:
         List[Dict[str, Any]]: Query results
     """
+    connector = get_connector()
+    if connector is None:
+        return [{"error": "Snowflake connector is not available"}]
     return connector.execute_query(query, params)
 
 
@@ -467,6 +512,10 @@ def get_table_data(table_name: str,
     Returns:
         List[Dict[str, Any]]: Table data
     """
+    connector = get_connector()
+    if connector is None:
+        return [{"error": "Snowflake connector is not available"}]
+
     query = f"SELECT * FROM {table_name}"
 
     if where_clause:
@@ -480,10 +529,11 @@ def get_table_data(table_name: str,
     return connector.execute_query(query)
 
 
-# Export classes and helper functions
+# Export functions instead of instance
 __all__ = [
     'SnowflakeConnector',
-    'connector',
+    'get_connector',
+    'init_with_oauth_token',
     'execute_snowflake_query',
     'get_table_data'
 ]
