@@ -1,0 +1,19 @@
+# Ignore environment variables
+.env
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore PyCharm settings
+.idea/
+
+# Ignore virtual environments
+venv/
+.envrc
+
+# Ignore OS-specific files
+.DS_Store
+
+# Ignore any logs
+*.log
