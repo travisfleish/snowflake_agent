@@ -16,7 +16,7 @@ load_dotenv()
 
 
 class SnowflakeConfig:
-    """Snowflake connection configuration settings."""
+    """Snowflake connection configuration settings with OAuth support."""
 
     def __init__(self):
         self.account = os.getenv("SNOWFLAKE_ACCOUNT")
@@ -32,6 +32,15 @@ class SnowflakeConfig:
         self.private_key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
         self.private_key_passphrase = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
 
+        # OAuth parameters
+        self.oauth_enabled = os.getenv("SNOWFLAKE_OAUTH_ENABLED", "False").lower() == "true"
+        self.oauth_client_id = os.getenv("SNOWFLAKE_OAUTH_CLIENT_ID")
+        self.oauth_client_secret = os.getenv("SNOWFLAKE_OAUTH_CLIENT_SECRET")
+        self.oauth_redirect_uri = os.getenv("SNOWFLAKE_OAUTH_REDIRECT_URI")
+        self.oauth_token_endpoint = os.getenv("SNOWFLAKE_OAUTH_TOKEN_ENDPOINT")
+        self.oauth_authorize_endpoint = os.getenv("SNOWFLAKE_OAUTH_AUTHORIZE_ENDPOINT")
+        self.oauth_token = None  # Will be set dynamically when a token is obtained
+
     def validate(self) -> bool:
         """
         Validate required Snowflake configuration parameters.
@@ -41,9 +50,19 @@ class SnowflakeConfig:
         """
         required_params = ["account", "user"]
 
-        # Either password or private_key_path must be provided
+        # If OAuth is enabled, validate OAuth parameters
+        if self.oauth_enabled:
+            oauth_params = ["oauth_client_id", "oauth_client_secret", "oauth_redirect_uri",
+                           "oauth_token_endpoint", "oauth_authorize_endpoint"]
+            for param in oauth_params:
+                if not getattr(self, param):
+                    logger.error(f"OAuth is enabled but missing required parameter: {param}")
+                    return False
+            return True  # If OAuth is properly configured, we don't need password or key
+
+        # Either password or private_key_path must be provided if not using OAuth
         if not self.password and not self.private_key_path:
-            logger.error("Either SNOWFLAKE_PASSWORD or SNOWFLAKE_PRIVATE_KEY_PATH must be provided")
+            logger.error("Either SNOWFLAKE_PASSWORD or SNOWFLAKE_PRIVATE_KEY_PATH must be provided when OAuth is disabled")
             return False
 
         for param in required_params:
@@ -72,8 +91,10 @@ class SnowflakeConfig:
         # Filter out None values
         params = {k: v for k, v in params.items() if v is not None}
 
-        # Add authentication
-        if self.password:
+        # Add authentication based on method
+        if self.oauth_enabled and self.oauth_token:
+            params["token"] = self.oauth_token
+        elif self.password:
             params["password"] = self.password
         elif self.private_key_path:
             params["private_key_path"] = self.private_key_path

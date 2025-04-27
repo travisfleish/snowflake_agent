@@ -83,17 +83,18 @@ class SnowflakeConnector:
                 logger.error(f"Missing required Snowflake parameter: {param}")
                 return False
 
-        # Either password or private_key_path should be provided
+        # Check authentication method
         if ('password' not in self.connection_params or not self.connection_params['password']) and \
-                ('private_key_path' not in self.connection_params or not self.connection_params['private_key_path']):
-            logger.error("Either password or private_key_path must be provided")
+           ('private_key_path' not in self.connection_params or not self.connection_params['private_key_path']) and \
+           ('token' not in self.connection_params or not self.connection_params['token']):
+            logger.error("Either password, private_key_path, or OAuth token must be provided")
             return False
 
         return True
 
     def _create_connection(self) -> SnowflakeConnection:
         """
-        Create a new Snowflake connection.
+        Create a new Snowflake connection with OAuth support.
 
         Returns:
             SnowflakeConnection: Snowflake connection object
@@ -102,6 +103,28 @@ class SnowflakeConnector:
             ConnectionError: If connection fails
         """
         try:
+            # If OAuth is enabled, ensure we have a valid token
+            if settings.snowflake.oauth_enabled and settings.snowflake.oauth_token and 'token' not in self.connection_params:
+                # Update connection params with the token
+                self.connection_params['token'] = settings.snowflake.oauth_token
+                logger.debug("Using OAuth token for Snowflake connection")
+
+            # Check if we need to refresh an OAuth token
+            if 'token' in self.connection_params and settings.snowflake.oauth_enabled:
+                # In a real application, you'd get the user ID from the session
+                # This is just a placeholder - you would implement user session management
+                try:
+                    from utils.oauth_manager import oauth_manager
+                    user_id = "current_user_id"  # This should come from your session management
+                    if not oauth_manager.is_token_valid(user_id):
+                        new_token = oauth_manager.get_valid_token(user_id)
+                        if new_token:
+                            self.connection_params['token'] = new_token
+                        else:
+                            logger.warning("OAuth token refresh failed, proceeding with current token")
+                except (ImportError, AttributeError):
+                    logger.warning("OAuth manager not available, proceeding with current token")
+
             connection = snowflake.connector.connect(**self.connection_params)
             logger.debug("Created new Snowflake connection")
             return connection
@@ -233,6 +256,18 @@ class SnowflakeConnector:
             except (DatabaseError, OperationalError, ProgrammingError) as e:
                 last_error = e
                 retries += 1
+
+                # Check if the error is due to an expired OAuth token
+                if settings.snowflake.oauth_enabled and isinstance(e, DatabaseError) and "JWT token has expired" in str(e):
+                    logger.warning("OAuth token expired during query execution, attempting refresh")
+                    try:
+                        from utils.oauth_manager import oauth_manager
+                        user_id = "current_user_id"  # This should come from your session management
+                        if oauth_manager.refresh_token(user_id):
+                            # Update connection params with new token
+                            self.connection_params['token'] = settings.snowflake.oauth_token
+                    except (ImportError, AttributeError):
+                        logger.warning("OAuth manager not available for token refresh")
 
                 # Log retry attempt
                 if retries <= self.max_retries:
