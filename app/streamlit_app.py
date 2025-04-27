@@ -58,7 +58,7 @@ def create_sidebar():
             if success:
                 st.sidebar.success("✅ OAuth authentication successful!")
                 # Force rerun to update UI
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.sidebar.error("❌ OAuth authentication failed.")
 

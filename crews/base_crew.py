@@ -152,9 +152,8 @@ class BaseCrew:
             agent=agent_instance,
             expected_output=expected_output,
             context=context,
-            async_execution=async_execution,
-            output_file=output_file,
-            callback=callback
+            async_execution=async_execution
+            # Note: output_file and callback removed as they're not supported in newer CrewAI
         )
 
         self.add_task(task)
@@ -171,19 +170,17 @@ class BaseCrew:
             # Convert BaseAgent instances to CrewAI Agent instances
             crew_agents = [agent.get_crew_agent() for agent in self.agents]
 
-            # Create the crew
-            self._crew = Crew(
-                agents=crew_agents,
-                tasks=self.tasks,
-                verbose=self.config.verbose,
-                sequential=self.config.sequential,
-                memory=self.config.memory,
-                max_rpm=self.config.max_rpm,
-                cache=self.config.cache_type != 'none',
-                cache_type=self.config.cache_type if self.config.cache_type != 'none' else None,
-                process_inputs=self._process_task_inputs if hasattr(self, '_process_task_inputs') else None,
-                manager_llm_config=self._get_manager_llm_config() if hasattr(self, '_get_manager_llm_config') else None
-            )
+            # Create the crew with the updated API
+            crew_kwargs = {
+                "agents": crew_agents,
+                "tasks": self.tasks,
+                "verbose": self.config.verbose
+            }
+
+            # Note: In CrewAI 0.114.0, many parameters have been removed or changed
+            # We only include the ones that are still supported
+
+            self._crew = Crew(**crew_kwargs)
 
         return self._crew
 

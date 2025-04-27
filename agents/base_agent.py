@@ -5,6 +5,7 @@ Provides foundational functionality for all agent types.
 
 import logging
 from typing import List, Dict, Any, Optional, Union, Callable
+import datetime
 
 from crewai import Agent, Task, Crew
 from pydantic import BaseModel, Field
@@ -159,7 +160,8 @@ class BaseAgent:
                 verbose=self.verbose,
                 allow_delegation=self.allow_delegation,
                 tools=self.tools,
-                llm_config=self.llm_config
+                # Updated for newer CrewAI version
+                llm=self.llm_config  # Changed from llm_config to llm
             )
         return self._crew_agent
 
